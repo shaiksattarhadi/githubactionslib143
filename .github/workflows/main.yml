@@ -1,0 +1,63 @@
+# This workflow will build a MuleSoft project and deploy to CloudHub
+
+name: Get changed files in PR
+
+on:
+  pull_request:
+    branches: [Development]
+    types: [opened, edited, synchronize]
+
+env:
+  git_token: ${{ secrets.TOKEN }}
+  pr_number: ${{ github.event.pull_request.number }}
+  reponame: ${{ github.event.repository.name }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Cache Depenedencies
+      uses: actions/setup-java@v2
+      with:
+        java-version: '11'
+        distribution: 'adopt'
+        cache: maven
+      
+    - name: Get changed files list and Build 
+      run: |
+        sudo apt-get update
+        sudo apt-get install jq
+        curl -s -H "Authorization: token "${git_token}"" "https://api.github.com/repos/shaiksattarhadi/githubactionslib/pulls/$pr_number/files" >> pr_changed_list.json
+        #cat pr_changed_list.json
+        changed_list=`jq '.[].filename' pr_changed_list.json`
+        echo "Changed File list is: $changed_list"
+        
+        for filename in `jq '.[].filename' pr_changed_list.json`
+        do
+          parentdir="$(echo $filename  | head -n1 | sed 's/"//g' | cut -d "/" -f1 )"
+          echo "Files changed in these folders is: $parentdir"
+          echo "$parentdir" >> changedfolder.txt
+        done
+        if grep -Fxq "lib1" changedfolder.txt
+        then
+          echo "Changes found in lib1, so doing mvn build lib1"
+          cd $GITHUB_WORKSPACE/lib1
+          mvn -B clean package -s .maven/settings.xml
+        elif grep -Fxq "lib2" changedfolder.txt
+        then
+          echo "Changes found in lib2, so doing mvn build lib2"
+          cd $GITHUB_WORKSPACE/lib2
+          mvn -B clean package -s .maven/settings.xml
+        elif grep -Fxq "lib3" changedfolder.txt
+        then
+          echo "Changes found in lib3, so doing mvn build lib3"
+          cd $GITHUB_WORKSPACE/lib3
+          mvn -B clean package -s .maven/settings.xml
+        else
+          echo "Changes not found in any lib dirs, building parent pom.xml"
+          cd $GITHUB_WORKSPACE
+          mvn -B clean package -s .maven/settings.xml
+        fi 
